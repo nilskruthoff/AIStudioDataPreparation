@@ -4,6 +4,7 @@ use file_format::{FileFormat, Kind};
 use std::fs::{exists, File};
 use std::io::Read;
 use std::process::Command;
+use base64::{engine::general_purpose, Engine as _};
 
 const TO_MARKDOWN: &str = "markdown";
 
@@ -35,7 +36,16 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
         },
         Kind::Image => {
             match fmt {
-                _ => Ok(format!("TODO: {:?} of kind: {:?}", fmt, fmt.kind())),
+                FileFormat::JointPhotographicExpertsGroup |
+                FileFormat::PortableNetworkGraphics |
+                FileFormat::Webp |
+                FileFormat::TagImageFileFormat |
+                FileFormat::ScalableVectorGraphics |
+                FileFormat::RadianceHdr |
+                FileFormat::WindowsBitmap => {
+                    Ok(read_img_as_base64(file_path)?)
+                }
+                _ => Ok(format!("Bilder vom Typen '{:?}' werden nicht unterstützt", fmt.kind())),
             }
         },
         Kind::Other => {
@@ -84,6 +94,24 @@ fn try_read_file(file_path: &str) -> Result<String, Box<dyn Error>> {
 
     match result {
         Ok(_) => Ok(contents),
+        Err(e) => Err(Box::from(format!("{}", e))),
+    }
+}
+
+fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
+    let mut img_result = File::open(file_path);
+
+    match img_result {
+        Ok(mut img) => {
+            let mut buff = Vec::new();
+            img.read_to_end(&mut buff)?;
+
+            let base64 = general_purpose::STANDARD.encode(&buff);
+            println!("{}", base64);
+
+            fs::write("base64.txt", &base64).expect("TODO: panic message");
+            Ok(base64)
+        }
         Err(e) => Err(Box::from(format!("{}", e))),
     }
 }
