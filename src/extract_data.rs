@@ -1,10 +1,11 @@
 ﻿use std::error::Error;
-use std::fs;
+use std::io;
 use file_format::{FileFormat, Kind};
 use std::fs::{exists, File};
 use std::io::Read;
 use std::process::Command;
 use base64::{engine::general_purpose, Engine as _};
+use calamine::{open_workbook, Reader, Xlsx, XlsxError};
 
 const TO_MARKDOWN: &str = "markdown";
 
@@ -60,6 +61,9 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
         },
         Kind::Spreadsheet => {
             match fmt {
+                FileFormat::OfficeOpenXmlSpreadsheet => {
+                    Ok(read_xlsx_as_csv(file_path)?)
+                },
                 _ => Ok(format!("TODO: {:?} of kind: {:?}", fmt, fmt.kind())),
             }
         },
@@ -111,4 +115,30 @@ fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
         }
         Err(e) => Err(Box::from(format!("{}", e))),
     }
+}
+
+fn read_xlsx_as_csv(file_path: &str) -> io::Result<String> {
+    let mut workbook: Xlsx<_> = open_workbook(file_path)
+        .map_err(|xlsx_error: XlsxError| io::Error::new(io::ErrorKind::Other, xlsx_error.to_string()))?;
+
+    let sheet_names = workbook.sheet_names().to_vec();
+    let mut csv_str = String::new();
+
+    for sheet_name in sheet_names {
+        let mut sheet_str = String::new();
+        let range = workbook
+            .worksheet_range(&*sheet_name)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
+        for row in range.rows() {
+            let row_str: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
+            sheet_str.push_str(&row_str.join(",\t"));
+            sheet_str.push('\n');
+        }
+
+        csv_str.push_str(&format!("{}:\n", sheet_name));
+        csv_str.push_str(&format!("{}\n", &sheet_str));
+    }
+
+    Ok(csv_str)
 }
