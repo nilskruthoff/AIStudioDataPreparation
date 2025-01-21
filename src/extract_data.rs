@@ -107,9 +107,6 @@ fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
             img.read_to_end(&mut buff)?;
 
             let base64 = general_purpose::STANDARD.encode(&buff);
-            println!("{}", base64);
-
-            fs::write("base64.txt", &base64).expect("TODO: panic message");
             Ok(base64)
         }
         Err(e) => Err(Box::from(format!("{}", e))),
