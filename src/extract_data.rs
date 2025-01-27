@@ -1,13 +1,15 @@
-﻿use std::error::Error;
-use std::io;
+﻿use base64::{engine::general_purpose, Engine as _};
+use calamine::{open_workbook, Reader, Xlsx, XlsxError};
 use file_format::{FileFormat, Kind};
+use std::error::Error;
 use std::fs::{exists, File};
 use std::io::Read;
 use std::process::Command;
-use base64::{engine::general_purpose, Engine as _};
-use calamine::{open_workbook, Reader, Xlsx, XlsxError};
+use std::io;
 
 const TO_MARKDOWN: &str = "markdown";
+const DOCX: &str = "docx";
+const ODT: &str = "odt";
 
 pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
     if let Err(_) = exists(file_path) {
@@ -15,6 +17,17 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
     }
 
     let fmt = FileFormat::from_file(file_path)?;
+    let ext = file_path.split('.').last().unwrap();
+    println!("{:?}", ext);
+
+    match ext {
+        DOCX => return convert_with_pandoc(file_path, DOCX, TO_MARKDOWN),
+        ODT => return convert_with_pandoc(file_path, ODT, TO_MARKDOWN),
+        "xlsx" => return read_xlsx_as_csv(file_path),
+        _ => {}
+    }
+
+    println!("Kind {:?}, Format {:?}, Media Type {:?}", fmt.kind(), fmt, fmt.media_type());
     match fmt.kind() {
         Kind::Document => {
             match fmt {
@@ -117,7 +130,7 @@ fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
     }
 }
 
-fn read_xlsx_as_csv(file_path: &str) -> io::Result<String> {
+fn read_xlsx_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
     let mut workbook: Xlsx<_> = open_workbook(file_path)
         .map_err(|xlsx_error: XlsxError| io::Error::new(io::ErrorKind::Other, xlsx_error.to_string()))?;
 
@@ -132,7 +145,7 @@ fn read_xlsx_as_csv(file_path: &str) -> io::Result<String> {
 
         for row in range.rows() {
             let row_str: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
-            sheet_str.push_str(&row_str.join(",\t"));
+            sheet_str.push_str(&row_str.join(","));
             sheet_str.push('\n');
         }
 
