@@ -145,7 +145,7 @@ fn read_spreadsheet_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
                         if cell.is_empty() {
                             "".to_string()
                         } else if cell.is_string() {
-                            cell.get_string().unwrap_or("").to_string()
+                            cell.get_string().unwrap_or("").trim().to_string()
                         } else if cell.is_int() {
                             cell.get_int().unwrap_or(0).to_string()
                         } else if cell.is_float() {
