@@ -2,10 +2,11 @@
 use calamine::{open_workbook, Reader, Xlsx, XlsxError};
 use file_format::{FileFormat, Kind};
 use std::error::Error;
-use std::fs::{exists, File};
+use std::fs::{exists, File, read};
 use std::io::Read;
 use std::process::Command;
 use std::io;
+use pdf_extract::extract_text_from_mem;
 
 const TO_MARKDOWN: &str = "markdown";
 const DOCX: &str = "docx";
@@ -32,7 +33,7 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
         Kind::Document => {
             match fmt {
                 FileFormat::PortableDocumentFormat => {
-                    convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
+                    read_pdf(file_path)
                 },
                 FileFormat::MicrosoftWordDocument => {
                     convert_with_pandoc(file_path, "docx", TO_MARKDOWN)
@@ -154,4 +155,10 @@ fn read_xlsx_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
     }
 
     Ok(csv_str)
+}
+
+fn read_pdf(file_path: &str) -> Result<String, Box<dyn Error>> {
+    let bytes = read(file_path)?;
+    let out = extract_text_from_mem(&bytes)?;
+    Ok(out)
 }
