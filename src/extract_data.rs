@@ -64,8 +64,12 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
             }
         },
         Kind::Other => {
-            let content = try_read_file(file_path)?;
-            Ok(content)
+            match fmt {
+                FileFormat::HypertextMarkupLanguage => {
+                    convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
+                },
+                _ => Ok(try_read_file(file_path)?),
+            }
         },
         Kind::Presentation => {
             match fmt {
@@ -97,7 +101,6 @@ fn convert_with_pandoc(file_path: &str, from: &str, to: &str) -> Result<String, 
 
     if cmd.status.success() {
         let content = String::from_utf8(cmd.stdout)?;
-        println!("{}", content);
         Ok(content)
     } else {
         let stderr = String::from_utf8_lossy(&cmd.stderr);
