@@ -1,12 +1,11 @@
 ﻿use base64::{engine::general_purpose, Engine as _};
-use calamine::{open_workbook, Reader, Xlsx, XlsxError};
+use calamine::{open_workbook_auto, DataType, Reader};
 use file_format::{FileFormat, Kind};
+use pdf_extract::extract_text_from_mem;
 use std::error::Error;
-use std::fs::{exists, File, read};
+use std::fs::{exists, read, File};
 use std::io::Read;
 use std::process::Command;
-use std::io;
-use pdf_extract::extract_text_from_mem;
 
 const TO_MARKDOWN: &str = "markdown";
 const DOCX: &str = "docx";
@@ -24,7 +23,8 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
     match ext {
         DOCX => return convert_with_pandoc(file_path, DOCX, TO_MARKDOWN),
         ODT => return convert_with_pandoc(file_path, ODT, TO_MARKDOWN),
-        "xlsx" => return read_xlsx_as_csv(file_path),
+        "xlsx" | "ods" | "xls" | "xlsm"
+        | "xlsb" | "xla" | "xlam" => return read_spreadsheet_as_csv(file_path),
         _ => {}
     }
 
@@ -76,7 +76,7 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
         Kind::Spreadsheet => {
             match fmt {
                 FileFormat::OfficeOpenXmlSpreadsheet => {
-                    Ok(read_xlsx_as_csv(file_path)?)
+                    Ok(read_spreadsheet_as_csv(file_path)?)
                 },
                 _ => Ok(format!("TODO: {:?} of kind: {:?}", fmt, fmt.kind())),
             }
@@ -131,29 +131,51 @@ fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
     }
 }
 
-fn read_xlsx_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
-    let mut workbook: Xlsx<_> = open_workbook(file_path)
-        .map_err(|xlsx_error: XlsxError| io::Error::new(io::ErrorKind::Other, xlsx_error.to_string()))?;
-
-    let sheet_names = workbook.sheet_names().to_vec();
+fn read_spreadsheet_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
+    let mut workbook = open_workbook_auto(file_path)?;
+    let sheet_names = workbook.sheet_names().to_owned();
     let mut csv_str = String::new();
 
-    for sheet_name in sheet_names {
-        let mut sheet_str = String::new();
-        let range = workbook
-            .worksheet_range(&*sheet_name)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-
-        for row in range.rows() {
-            let row_str: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
-            sheet_str.push_str(&row_str.join(","));
-            sheet_str.push('\n');
+    for sheet_name in &sheet_names {
+        match workbook.worksheet_range(sheet_name) {
+            Ok(range) => {
+                csv_str.push_str(&format!("{}:\n", sheet_name));
+                for row in range.rows() {
+                    let row_str: Vec<String> = row.iter().map(|cell| {
+                        if cell.is_empty() {
+                            "".to_string()
+                        } else if cell.is_string() {
+                            cell.get_string().unwrap_or("").to_string()
+                        } else if cell.is_int() {
+                            cell.get_int().unwrap_or(0).to_string()
+                        } else if cell.is_float() {
+                            cell.get_float().unwrap_or(0.0).to_string()
+                        } else if cell.is_bool() {
+                            cell.get_bool().unwrap_or(false).to_string()
+                        } else if cell.is_datetime() {
+                            if let Some(dt) = cell.get_datetime() {
+                                if let Some(datetime) = dt.as_datetime() {
+                                    datetime.format("%d.%m.%Y %H:%M:%S").to_string()
+                                } else {
+                                    "".to_string()
+                                }
+                            } else {
+                                "".to_string()
+                            }
+                        }
+                        else {
+                            "".to_string()
+                        }
+                    }).collect();
+                    csv_str.push_str(&row_str.join(","));
+                    csv_str.push('\n');
+                }
+            }
+            Err(e) => {
+                csv_str.push_str(&format!("Das Arbeitsblatt '{}' konnte nicht gelesen werden: {}\n", sheet_name, e));
+            }
         }
-
-        csv_str.push_str(&format!("{}:\n", sheet_name));
-        csv_str.push_str(&format!("{}\n", &sheet_str));
     }
-
     Ok(csv_str)
 }
 
