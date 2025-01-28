@@ -117,7 +117,7 @@ fn try_read_file(file_path: &str) -> Result<String, Box<dyn Error>> {
 }
 
 fn read_img_as_base64(file_path: &str) -> Result<String, Box<dyn Error>> {
-    let mut img_result = File::open(file_path);
+    let img_result = File::open(file_path);
 
     match img_result {
         Ok(mut img) => {
