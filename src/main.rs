@@ -1,7 +1,7 @@
 mod extract_data;
 
 use extract_data::*;
-use clap::{Parser};
+use clap::Parser;
 
 #[derive(Parser)]
 #[command(
