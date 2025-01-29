@@ -22,8 +22,8 @@ AIStudioDataPreparation.exe -p "/absolute/path/to/your/file"
 
 Extracting pdf content relies on **Pdfium**, so you will need to have Pdfium available on your local machine.
 The easiest way to set this up is to download the latest binaries from projects such as [bblanchon
-/ pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) and place the `pdfium.dll' next to the rust executable.
-This would be `target/release/' or `target/debug/'.
+/ pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) and place the `pdfium.dll` next to the rust executable.
+This would be `target/release/` or `target/debug/`.
 \
 \
 More information about binding the library can be found 
