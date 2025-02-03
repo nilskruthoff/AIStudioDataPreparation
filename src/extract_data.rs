@@ -1,12 +1,11 @@
 ﻿use base64::{engine::general_purpose, Engine as _};
 use calamine::{open_workbook_auto, DataType, Reader};
 use file_format::{FileFormat, Kind};
-use pdfium_render::prelude::Pdfium;
+use pdfium_render::prelude::{PdfPageAnnotationCommon, PdfPageObjectsCommon, Pdfium};
 use std::error::Error;
 use std::fs::{exists, File};
 use std::io::Read;
 use std::process::Command;
-
 
 const TO_MARKDOWN: &str = "markdown";
 const DOCX: &str = "docx";
@@ -56,67 +55,60 @@ pub fn extract_data(file_path: &str) -> Result<String, Box<dyn Error>> {
     match ext {
         DOCX => return convert_with_pandoc(file_path, DOCX, TO_MARKDOWN),
         ODT => return convert_with_pandoc(file_path, ODT, TO_MARKDOWN),
-        "xlsx" | "ods" | "xls" | "xlsm"
-        | "xlsb" | "xla" | "xlam" => return read_spreadsheet_as_csv(file_path),
+        "xlsx" | "ods" | "xls" | "xlsm" | "xlsb" | "xla" | "xlam" => {
+            return read_spreadsheet_as_csv(file_path)
+        }
         _ => {}
     }
 
-    println!("Kind {:?}, Format {:?}, Media Type {:?}", fmt.kind(), fmt, fmt.media_type());
+    println!(
+        "Kind {:?}, Format {:?}, Media Type {:?}",
+        fmt.kind(),
+        fmt,
+        fmt.media_type()
+    );
     match fmt.kind() {
-        Kind::Document => {
-            match fmt {
-                FileFormat::PortableDocumentFormat => {
-                    read_pdf(file_path)
-                },
-                FileFormat::MicrosoftWordDocument => {
-                    convert_with_pandoc(file_path, "docx", TO_MARKDOWN)
-                },
-                FileFormat::OfficeOpenXmlDocument => {
-                    convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
-                },
-                _ => Ok(try_read_file(file_path)?),
+        Kind::Document => match fmt {
+            FileFormat::PortableDocumentFormat => read_pdf(file_path),
+            FileFormat::MicrosoftWordDocument => {
+                convert_with_pandoc(file_path, "docx", TO_MARKDOWN)
             }
-        }
-        Kind::Ebook => {
-            match fmt {
-                _ => Ok(format!("TODO: '{:?}' of kind: '{:?}'", fmt, fmt.kind())),
+            FileFormat::OfficeOpenXmlDocument => {
+                convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
             }
+            _ => Ok(try_read_file(file_path)?),
         },
-        Kind::Image => {
-            match fmt {
-                FileFormat::JointPhotographicExpertsGroup |
-                FileFormat::PortableNetworkGraphics |
-                FileFormat::Webp |
-                FileFormat::TagImageFileFormat |
-                FileFormat::ScalableVectorGraphics |
-                FileFormat::RadianceHdr |
-                FileFormat::WindowsBitmap => {
-                    Ok(read_img_as_base64(file_path)?)
-                }
-                _ => Ok(format!("Bilder vom Typen '{:?}' werden nicht unterstützt", fmt.kind())),
-            }
+        Kind::Ebook => match fmt {
+            _ => Ok(format!("TODO: '{:?}' of kind: '{:?}'", fmt, fmt.kind())),
         },
-        Kind::Other => {
-            match fmt {
-                FileFormat::HypertextMarkupLanguage => {
-                    convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
-                },
-                _ => Ok(try_read_file(file_path)?),
-            }
+        Kind::Image => match fmt {
+            FileFormat::JointPhotographicExpertsGroup
+            | FileFormat::PortableNetworkGraphics
+            | FileFormat::Webp
+            | FileFormat::TagImageFileFormat
+            | FileFormat::ScalableVectorGraphics
+            | FileFormat::RadianceHdr
+            | FileFormat::WindowsBitmap => Ok(read_img_as_base64(file_path)?),
+            _ => Ok(format!(
+                "Bilder vom Typen '{:?}' werden nicht unterstützt",
+                fmt.kind()
+            )),
         },
-        Kind::Presentation => {
-            match fmt {
-                FileFormat::OfficeOpenXmlPresentation => { convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN) },
-                _ => Ok(try_read_file(file_path)?),
+        Kind::Other => match fmt {
+            FileFormat::HypertextMarkupLanguage => {
+                convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
             }
+            _ => Ok(try_read_file(file_path)?),
         },
-        Kind::Spreadsheet => {
-            match fmt {
-                FileFormat::OfficeOpenXmlSpreadsheet => {
-                    Ok(read_spreadsheet_as_csv(file_path)?)
-                },
-                _ => Ok(format!("TODO: {:?} of kind: {:?}", fmt, fmt.kind())),
+        Kind::Presentation => match fmt {
+            FileFormat::OfficeOpenXmlPresentation => {
+                convert_with_pandoc(file_path, fmt.extension(), TO_MARKDOWN)
             }
+            _ => Ok(try_read_file(file_path)?),
+        },
+        Kind::Spreadsheet => match fmt {
+            FileFormat::OfficeOpenXmlSpreadsheet => Ok(read_spreadsheet_as_csv(file_path)?),
+            _ => Ok(format!("TODO: {:?} of kind: {:?}", fmt, fmt.kind())),
         },
         _ => Ok(try_read_file(file_path)?),
     }
@@ -137,7 +129,10 @@ fn convert_with_pandoc(file_path: &str, from: &str, to: &str) -> Result<String, 
         Ok(content)
     } else {
         let stderr = String::from_utf8_lossy(&cmd.stderr);
-        Err(Box::from(format!("Pandoc-Konvertierung von '{}' nach '{}' fehlgeschlagen: {}", from, to, stderr)))
+        Err(Box::from(format!(
+            "Pandoc-Konvertierung von '{}' nach '{}' fehlgeschlagen: {}",
+            from, to, stderr
+        )))
     }
 }
 
@@ -177,38 +172,43 @@ fn read_spreadsheet_as_csv(file_path: &str) -> Result<String, Box<dyn Error>> {
             Ok(range) => {
                 csv_str.push_str(&format!("{}:\n", sheet_name));
                 for row in range.rows() {
-                    let row_str: Vec<String> = row.iter().map(|cell| {
-                        if cell.is_empty() {
-                            "".to_string()
-                        } else if cell.is_string() {
-                            cell.get_string().unwrap_or("").trim().to_string()
-                        } else if cell.is_int() {
-                            cell.get_int().unwrap_or(0).to_string()
-                        } else if cell.is_float() {
-                            cell.get_float().unwrap_or(0.0).to_string()
-                        } else if cell.is_bool() {
-                            cell.get_bool().unwrap_or(false).to_string()
-                        } else if cell.is_datetime() {
-                            if let Some(dt) = cell.get_datetime() {
-                                if let Some(datetime) = dt.as_datetime() {
-                                    datetime.format("%d.%m.%Y %H:%M:%S").to_string()
+                    let row_str: Vec<String> = row
+                        .iter()
+                        .map(|cell| {
+                            if cell.is_empty() {
+                                "".to_string()
+                            } else if cell.is_string() {
+                                cell.get_string().unwrap_or("").trim().to_string()
+                            } else if cell.is_int() {
+                                cell.get_int().unwrap_or(0).to_string()
+                            } else if cell.is_float() {
+                                cell.get_float().unwrap_or(0.0).to_string()
+                            } else if cell.is_bool() {
+                                cell.get_bool().unwrap_or(false).to_string()
+                            } else if cell.is_datetime() {
+                                if let Some(dt) = cell.get_datetime() {
+                                    if let Some(datetime) = dt.as_datetime() {
+                                        datetime.format("%d.%m.%Y %H:%M:%S").to_string()
+                                    } else {
+                                        "".to_string()
+                                    }
                                 } else {
                                     "".to_string()
                                 }
                             } else {
                                 "".to_string()
                             }
-                        }
-                        else {
-                            "".to_string()
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     csv_str.push_str(&row_str.join(","));
                     csv_str.push('\n');
                 }
             }
             Err(e) => {
-                csv_str.push_str(&format!("Das Arbeitsblatt '{}' konnte nicht gelesen werden: {}\n", sheet_name, e));
+                csv_str.push_str(&format!(
+                    "Das Arbeitsblatt '{}' konnte nicht gelesen werden: {}\n",
+                    sheet_name, e
+                ));
             }
         }
     }
@@ -220,11 +220,31 @@ fn read_pdf(file_path: &str) -> Result<String, Box<dyn Error>> {
     let doc = pdfium.load_pdf_from_file(file_path, None);
     match doc {
         Ok(doc) => {
-            let mut text = String::new();
-            for page in doc.pages().iter() {
-                text.push_str(&page.text()?.all());
-            }
-            Ok(text)
+            doc.pages()
+                .iter()
+                .enumerate()
+                .for_each(|(page_index, page)| {
+                    println!("\n++++++++++++++ Page {} ++++++++++++++\n", page_index + 1);
+
+                    let page_txt = page.text().unwrap().all();
+                    println!("{}\n", page_txt);
+
+                    page.objects()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(object_index, object)| {
+                            if let Some(image) = object.as_image_object() {
+                                if let Ok(image) = image.get_raw_image() {
+                                    println!(
+                                        "Found image with id {} at page {}:",
+                                        object_index,
+                                        page_index + 1
+                                    );
+                                }
+                            };
+                        });
+                });
+            Ok("".to_string())
         }
         Err(e) => Err(Box::from(format!("{}", e))),
     }
