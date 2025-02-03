@@ -1,12 +1,35 @@
 mod extract_data;
 
 use extract_data::*;
-fn main() {
-    let path = "C:/Users/krut_ni/RustroverProjects/AIStudioDataPreparation/test-data/AuthorController.cs";
+use clap::Parser;
 
-    let fmt_result = extract_data(path);
+#[derive(Parser)]
+#[command(
+    version = "0.1.0",
+    about = "Isolated program to test data extraction for AIStudio",
+)]
+struct Args {
+    #[arg(
+        long,
+        short = 'p',
+        value_name = "PATH",
+        help = "The path to the file containing the data to be extracted.",
+        required = true,
+    )]
+    path: std::path::PathBuf,
+}
+
+fn main() {
+    let args = Args::parse();
+    let path_str = args.path.to_str().unwrap();
+
+    let fmt_result = extract_data(path_str);
     match fmt_result {
-        Ok(data) => {println!("{}", data)},
-        Err(e) => {println!("{}", e)}
+        Ok(data) => {
+            println!("{}", data)
+        }
+        Err(e) => {
+            println!("{}", e)
+        }
     }
 }
