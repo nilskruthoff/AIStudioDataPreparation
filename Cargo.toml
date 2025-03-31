@@ -4,9 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-file-format = "0.26.0"
-base64 = "0.22.1"
-calamine = { version = "0.26.1", features = ["dates"] }
 chrono = "0.4.39"
-pdfium-render = "0.8.27"
 clap = { version = "4.5.27", features = ["derive"] }
+futures-core = "0.3.31"
+async-stream = "0.3"
+tokio = { version = "1.0", features = ["full", "process"] }
+tokio-stream = "0.1"
+futures = "0.3"
+base64 = "0.21"
+calamine = "0.22"
+pdfium-render = "0.8"
+file-format = "0.26"
